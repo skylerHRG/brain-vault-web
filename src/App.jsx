@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { 
   Search, FileText, LogOut, Sparkles, X, Copy, 
   ShieldCheck, BarChart3, Lock, Mail, Loader2, 
-  Users, PenTool 
+  Users, PenTool, Github
 } from 'lucide-react'
 import { supabase } from './supabaseClient'
 
@@ -16,6 +16,11 @@ function App() {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResult, setAiResult] = useState("")
   const [role, setRole] = useState(null)
+  
+  // 登录表单状态
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [authLoading, setAuthLoading] = useState(false)
 
   // 检查登录状态
   useEffect(() => {
@@ -56,9 +61,13 @@ function App() {
     setLoading(false)
   }
 
-  // AI 重构逻辑 (增加防崩溃与 Key 检查)
+  // AI 重构逻辑
   const handleReconstruct = async () => {
-    if (role !== 'superadmin') return;
+    if (role !== 'superadmin') {
+      alert("抱歉，只有超级管理员 (superadmin) 可以使用 AI 重构功能。");
+      return;
+    }
+    
     const selectedContent = results
       .filter(item => selectedIds.includes(item.id))
       .map((item, i) => `【素材${i + 1}】: ${item.content}`)
@@ -70,7 +79,7 @@ function App() {
 
     try {
       const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-      if (!apiKey) throw new Error("缺失 VITE_GROQ_API_KEY 环境变量");
+      if (!apiKey) throw new Error("缺失 VITE_GROQ_API_KEY 环境变量，请在 Vercel 中配置。");
 
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -101,7 +110,28 @@ function App() {
     }
   }
 
-  // 登录组件
+  // 邮箱登录
+  const handleEmailLogin = async (e) => {
+    e.preventDefault();
+    if (!email || !password) return alert("请输入邮箱和密码");
+    setAuthLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) alert("登录失败: " + error.message);
+    setAuthLoading(false);
+  };
+
+  // 邮箱注册
+  const handleEmailSignUp = async (e) => {
+    e.preventDefault();
+    if (!email || !password) return alert("请输入邮箱和密码");
+    setAuthLoading(true);
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) alert("注册失败: " + error.message);
+    else alert("注册成功！如果无法直接登录，请前往 Supabase 后台关闭邮箱验证(Confirm email)选项。");
+    setAuthLoading(false);
+  };
+
+  // ================= 登录界面 =================
   if (!session) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
@@ -111,17 +141,62 @@ function App() {
           </div>
           <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e293b', marginBottom: '8px' }}>Brain Vault</h2>
           <p style={{ color: '#64748b', marginBottom: '30px' }}>个人数字资产中枢</p>
+          
+          <form style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
+            <input 
+              type="email" 
+              placeholder="请输入邮箱" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', boxSizing: 'border-box' }}
+            />
+            <input 
+              type="password" 
+              placeholder="请输入密码" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', boxSizing: 'border-box' }}
+            />
+            
+            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+              <button 
+                onClick={handleEmailLogin}
+                disabled={authLoading}
+                style={{ flex: 1, background: '#4F46E5', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: authLoading ? 'not-allowed' : 'pointer' }}
+              >
+                {authLoading ? '处理中...' : '登录'}
+              </button>
+              <button 
+                onClick={handleEmailSignUp}
+                disabled={authLoading}
+                style={{ flex: 1, background: 'white', color: '#4F46E5', padding: '12px', borderRadius: '8px', border: '1px solid #4F46E5', fontWeight: '600', cursor: authLoading ? 'not-allowed' : 'pointer' }}
+              >
+                注册
+              </button>
+            </div>
+          </form>
+
+          <div style={{ position: 'relative', margin: '20px 0' }}>
+            <div style={{ position: 'absolute', inset: '0', display: 'flex', alignItems: 'center' }}>
+              <div style={{ width: '100%', borderTop: '1px solid #e2e8f0' }}></div>
+            </div>
+            <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', fontSize: '14px' }}>
+              <span style={{ background: 'white', padding: '0 10px', color: '#94a3b8' }}>或</span>
+            </div>
+          </div>
+
           <button 
             onClick={() => supabase.auth.signInWithOAuth({ provider: 'github' })}
             style={{ width: '100%', background: '#1e293b', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
           >
-            使用 GitHub 登录
+            <Github size={20} /> 使用 GitHub 登录
           </button>
         </div>
       </div>
     )
   }
 
+  // ================= 主界面 =================
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
       {/* 头部导航 */}
@@ -148,7 +223,7 @@ function App() {
               style={{ width: '100%', padding: '12px 12px 12px 40px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none' }}
             />
           </div>
-          <button onClick={handleSearch} style={{ background: '#4F46E5', color: 'white', padding: '0 24px', borderRadius: '10px', border: 'none', fontWeight: '600' }}>检索</button>
+          <button onClick={handleSearch} style={{ background: '#4F46E5', color: 'white', padding: '0 24px', borderRadius: '10px', border: 'none', fontWeight: '600', cursor: 'pointer' }}>检索</button>
         </div>
 
         {/* 搜索结果 */}
@@ -163,7 +238,7 @@ function App() {
                     if (e.target.checked) setSelectedIds([...selectedIds, item.id])
                     else setSelectedIds(selectedIds.filter(id => id !== item.id))
                   }}
-                  style={{ marginTop: '4px' }}
+                  style={{ marginTop: '4px', cursor: 'pointer' }}
                 />
                 <div style={{ flex: 1 }}>
                   <p style={{ color: '#334155', lineHeight: 1.6 }}>{item.content}</p>
@@ -176,7 +251,7 @@ function App() {
         {/* 浮动操作栏 */}
         {selectedIds.length > 0 && (
           <div style={{ position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', background: '#1e293b', color: 'white', padding: '12px 24px', borderRadius: '50px', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
-            <span>已选 {selectedIds.length} 项素材</span>
+            <span>已选 {selectedIds.length} 项</span>
             <button 
               onClick={handleReconstruct}
               style={{ background: '#4F46E5', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '20px', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}
@@ -207,7 +282,7 @@ function App() {
               <div style={{ padding: '16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', textAlign: 'right' }}>
                 <button 
                   onClick={() => { navigator.clipboard.writeText(aiResult); alert("已复制到剪贴板！") }}
-                  style={{ background: 'white', border: '1px solid #e2e8f0', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', marginRight: '10px' }}
+                  style={{ background: 'white', border: '1px solid #e2e8f0', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer' }}
                 >
                   <Copy size={16} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> 复制报告
                 </button>
