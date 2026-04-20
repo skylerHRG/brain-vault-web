@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import { 
-  Search, BrainCircuit, FileText, LogOut, Sparkles, 
+  Search,FileText, LogOut, Sparkles, 
   X, Copy, ShieldCheck, BarChart3, Lock, Mail, Loader2, Users, PenTool
 } from 'lucide-react'
 
@@ -206,7 +206,7 @@ function App() {
         <div style={{ width: '100%', maxWidth: '400px', background: 'white', padding: '40px', borderRadius: '24px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
           <div style={{ textAlign: 'center', marginBottom: '32px' }}>
             <div style={{ width: '64px', height: '64px', background: '#4F46E5', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-              <BrainCircuit color="white" size={36} />
+              <img src="/logo.png" alt="Brain Vault Logo" style={{ width: '36px', height: '36px', objectFit: 'contain' }} />
             </div>
             <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b', margin: '0' }}>Brain Vault</h2>
             <p style={{ color: '#64748b', marginTop: '8px' }}>知识资产安全中心</p>
@@ -236,7 +236,9 @@ function App() {
       {/* Header */}
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ background: '#4F46E5', padding: '6px', borderRadius: '8px' }}><BrainCircuit color="white" size={24} /></div>
+          <div style={{ background: '#4F46E5', padding: '6px', borderRadius: '8px', display: 'flex' }}>
+  <img src="/logo.png" alt="Logo" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
+</div>
           <h2 style={{ margin: 0, fontSize: '20px', color: '#1e293b' }}>Brain Vault</h2>
           {/* 超管绿标 */}
           {role === 'superadmin' && <ShieldCheck size={22} color="#10b981" />}

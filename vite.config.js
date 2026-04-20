@@ -17,6 +17,11 @@ export default defineConfig({
         display: 'standalone', // 这个属性最重要！它会隐藏浏览器的地址栏
         icons: [
           {
+           src: '/logo.png', // 大图标也暂时指向它
+           sizes: '180x180',
+           type: 'image/png'
+        }
+          {
             src: '/pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png',
