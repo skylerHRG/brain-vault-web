@@ -1,16 +1,15 @@
 import { useState, useEffect } from 'react'
 import { 
   Search, FileText, LogOut, Sparkles, X, Copy, 
-  ShieldCheck, BarChart3, Lock, Mail, Loader2, 
-  Users, PenTool 
+  Loader2 
 } from 'lucide-react'
 import { supabase } from './supabaseClient'
 
 function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [isSearching, setIsSearching] = useState(false) // 新增：搜索中状态
-  const [hasSearched, setHasSearched] = useState(false) // 新增：是否搜索过
+  const [isSearching, setIsSearching] = useState(false)
+  const [hasSearched, setHasSearched] = useState(false)
   const [results, setResults] = useState([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedIds, setSelectedIds] = useState([])
@@ -30,17 +29,14 @@ function App() {
       setSession(session)
       if (session) {
         fetchRole(session.user.id)
-        // 登录后自动触发一次空搜索，展示最新内容
-        handleSearch("", true)
+        handleSearch("", true) // 登录后自动搜索展示最新内容
       }
       setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
-      if (session) {
-        fetchRole(session.user.id)
-      }
+      if (session) fetchRole(session.user.id)
     })
 
     return () => subscription.unsubscribe()
@@ -48,15 +44,11 @@ function App() {
 
   // 获取用户角色
   const fetchRole = async (userId) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', userId)
-      .single()
+    const { data } = await supabase.from('profiles').select('role').eq('id', userId).single()
     if (data) setRole(data.role)
   }
 
-  // 强大的搜索逻辑 (带异常捕获)
+  // 强大的搜索逻辑 (带权限报错提示)
   const handleSearch = async (overrideQuery = null, isInitial = false) => {
     setIsSearching(true)
     const currentQuery = overrideQuery !== null ? overrideQuery : searchQuery;
@@ -69,9 +61,8 @@ function App() {
         .limit(20)
       
       if (error) {
-        // 如果是数据库权限/策略报错，直接弹窗显示！不再装死。
-        alert("数据库查询被拒绝或发生错误: \n" + error.message);
         console.error("Supabase Error:", error);
+        alert("查询失败，您的账号可能缺少读取权限。\n错误信息: " + error.message);
       } else {
         setResults(data || [])
       }
@@ -85,17 +76,12 @@ function App() {
 
   // 键盘回车事件
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      handleSearch()
-    }
+    if (e.key === 'Enter') handleSearch()
   }
 
   // AI 重构逻辑
   const handleReconstruct = async () => {
-    if (role !== 'superadmin') {
-      alert("抱歉，由于算力成本高昂，系统仅对超级管理员 (superadmin) 开放 AI 重构。请在数据库 profiles 表中修改您的权限。");
-      return;
-    }
+    if (role !== 'superadmin') return alert("抱歉，需要 superadmin 权限才能调用 AI。");
     
     const selectedContent = results
       .filter(item => selectedIds.includes(item.id))
@@ -108,7 +94,7 @@ function App() {
 
     try {
       const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-      if (!apiKey) throw new Error("缺失 VITE_GROQ_API_KEY 环境变量，请在 Vercel 中配置。");
+      if (!apiKey) throw new Error("缺失 VITE_GROQ_API_KEY，请在 Vercel 中配置。");
 
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -125,11 +111,7 @@ function App() {
         })
       });
 
-      if (!response.ok) {
-        const errJson = await response.json();
-        throw new Error(errJson.error?.message || "AI 响应异常");
-      }
-
+      if (!response.ok) throw new Error("AI 响应异常");
       const data = await response.json();
       setAiResult(data.choices[0].message.content);
     } catch (e) { 
@@ -139,49 +121,49 @@ function App() {
     }
   }
 
-  // 纯净版：仅保留账号密码登录
+  // 纯粹的账号登录 (彻底无注册)
   const handleEmailLogin = async (e) => {
     e.preventDefault();
-    if (!email || !password) return alert("请输入邮箱和密码");
+    if (!email || !password) return alert("请输入管理员邮箱和密码");
     setAuthLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) alert("登录失败: " + error.message);
+    if (error) alert("登录拒绝: 账号或密码错误");
     setAuthLoading(false);
   };
 
-  // ================= 纯净私有化登录界面 =================
+  // ================= 极简私有化登录界面 (适配手机) =================
   if (!session) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
-        <div style={{ background: 'white', padding: '40px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', textAlign: 'center', maxWidth: '400px', width: '90%' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', padding: '20px' }}>
+        <div style={{ background: 'white', padding: '40px 24px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', textAlign: 'center', width: '100%', maxWidth: '360px', boxSizing: 'border-box' }}>
           <div style={{ background: '#4F46E5', width: '64px', height: '64px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-             <img src="/logo.png" alt="Logo" style={{ width: '40px', height: '40px', objectFit: 'contain' }} />
+             <img src="/logo.png" alt="Logo" style={{ width: '36px', height: '36px', objectFit: 'contain' }} />
           </div>
           <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e293b', marginBottom: '8px' }}>Brain Vault</h2>
-          <p style={{ color: '#64748b', marginBottom: '30px' }}>个人数字资产中枢</p>
+          <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '32px' }}>超级管理员专用入口</p>
           
           <form style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} onSubmit={handleEmailLogin}>
             <input 
               type="email" 
-              placeholder="管理员邮箱" 
+              placeholder="授权邮箱" 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', boxSizing: 'border-box' }}
+              style={{ width: '100%', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', boxSizing: 'border-box', fontSize: '16px' }}
             />
             <input 
               type="password" 
-              placeholder="密码" 
+              placeholder="专属密码" 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', boxSizing: 'border-box' }}
+              style={{ width: '100%', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', boxSizing: 'border-box', fontSize: '16px' }}
             />
             
             <button 
               type="submit"
               disabled={authLoading}
-              style={{ width: '100%', background: '#4F46E5', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: authLoading ? 'not-allowed' : 'pointer', marginTop: '8px' }}
+              style={{ width: '100%', background: '#4F46E5', color: 'white', padding: '14px', borderRadius: '8px', border: 'none', fontWeight: '600', fontSize: '16px', cursor: authLoading ? 'not-allowed' : 'pointer', marginTop: '8px' }}
             >
-              {authLoading ? '验证中...' : '安全登录'}
+              {authLoading ? '验证中...' : '安全进入'}
             </button>
           </form>
         </div>
@@ -189,49 +171,50 @@ function App() {
     )
   }
 
-  // ================= 主界面 =================
+  // ================= 主界面 (防溢出手机适配版) =================
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
-      {/* 头部导航 */}
-      <header style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      {/* 头部 */}
+      <header style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{ background: '#4F46E5', padding: '6px', borderRadius: '8px', display: 'flex' }}>
-            <img src="/logo.png" alt="Logo" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
+            <img src="/logo.png" alt="Logo" style={{ width: '20px', height: '20px', objectFit: 'contain' }} />
           </div>
-          <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e293b' }}>Brain Vault</h1>
+          <h1 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>Brain Vault</h1>
         </div>
-        <button onClick={() => supabase.auth.signOut()} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}><LogOut size={20} /></button>
+        <button onClick={() => supabase.auth.signOut()} style={{ background: 'none', border: 'none', color: '#64748b' }}><LogOut size={20} /></button>
       </header>
 
       {/* 主内容区 */}
-      <main style={{ padding: '24px', maxWidth: '1000px', margin: '0 auto' }}>
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-          <div style={{ flex: 1, position: 'relative' }}>
+      <main style={{ padding: '16px', maxWidth: '800px', margin: '0 auto', boxSizing: 'border-box' }}>
+        
+        {/* ✨ 修复点：搜索框与按钮的防挤压布局 ✨ */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', width: '100%' }}>
+          <div style={{ flex: '1 1 auto', position: 'relative', minWidth: 0 }}>
             <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={18} />
             <input 
               type="text" 
-              placeholder="搜索您的知识资产... (按回车检索)" 
+              placeholder="搜一搜... (回车检索)" 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              style={{ width: '100%', padding: '12px 12px 12px 40px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none' }}
+              style={{ width: '100%', padding: '14px 14px 14px 38px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none', boxSizing: 'border-box', fontSize: '16px' }}
             />
           </div>
           <button 
             onClick={() => handleSearch()} 
             disabled={isSearching}
-            style={{ background: '#4F46E5', color: 'white', padding: '0 24px', borderRadius: '10px', border: 'none', fontWeight: '600', cursor: isSearching ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{ flex: '0 0 auto', background: '#4F46E5', color: 'white', padding: '0 20px', borderRadius: '10px', border: 'none', fontWeight: '600', whiteSpace: 'nowrap', fontSize: '15px' }}
           >
-            {isSearching ? <Loader2 size={16} className="animate-spin" /> : null}
-            {isSearching ? '检索中' : '检索'}
+            {isSearching ? '...' : '检索'}
           </button>
         </div>
 
-        {/* 搜索结果区域 */}
-        <div style={{ display: 'grid', gap: '16px' }}>
+        {/* 结果列表 */}
+        <div style={{ display: 'grid', gap: '12px', paddingBottom: '80px' }}>
           {results.length > 0 ? (
             results.map(item => (
-              <div key={item.id} style={{ background: 'white', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+              <div key={item.id} style={{ background: 'white', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxSizing: 'border-box', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
                   <input 
                     type="checkbox" 
@@ -240,33 +223,37 @@ function App() {
                       if (e.target.checked) setSelectedIds([...selectedIds, item.id])
                       else setSelectedIds(selectedIds.filter(id => id !== item.id))
                     }}
-                    style={{ marginTop: '4px', cursor: 'pointer' }}
+                    style={{ marginTop: '5px', transform: 'scale(1.2)' }}
                   />
-                  <div style={{ flex: 1 }}>
-                    <p style={{ color: '#334155', lineHeight: 1.6 }}>{item.content}</p>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ color: '#334155', lineHeight: 1.6, fontSize: '15px', margin: 0 }}>{item.content}</p>
                   </div>
                 </div>
               </div>
             ))
           ) : (
-            // 空状态提示
             !isSearching && hasSearched && (
               <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
-                <FileText size={48} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
-                <p>未能找到相关的素材内容</p>
-                <p style={{ fontSize: '14px', marginTop: '8px' }}>可能是数据库为空，或您的新账号暂无读取权限</p>
+                <FileText size={40} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+                <p>未找到内容或数据库为空</p>
               </div>
             )
           )}
         </div>
 
-        {/* 浮动操作栏 */}
+        {/* 底部悬浮操作栏 */}
         {selectedIds.length > 0 && (
-          <div style={{ position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', background: '#1e293b', color: 'white', padding: '12px 24px', borderRadius: '50px', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
-            <span>已选 {selectedIds.length} 项</span>
+          <div style={{ 
+            position: 'fixed', bottom: '20px', left: '0', right: '0', margin: '0 auto', 
+            width: '90%', maxWidth: '400px', background: '#1e293b', color: 'white', 
+            padding: '12px 20px', borderRadius: '50px', display: 'flex', 
+            alignItems: 'center', justifyContent: 'space-between', 
+            boxShadow: '0 10px 25px rgba(0,0,0,0.2)', boxSizing: 'border-box' 
+          }}>
+            <span style={{ fontSize: '14px', fontWeight: '500' }}>已选 {selectedIds.length} 项</span>
             <button 
               onClick={handleReconstruct}
-              style={{ background: '#4F46E5', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '20px', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}
+              style={{ background: '#4F46E5', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '20px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px' }}
             >
               <Sparkles size={16} /> AI 重构
             </button>
@@ -276,13 +263,13 @@ function App() {
 
       {/* AI 结果弹窗 */}
       {isModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px' }}>
-          <div style={{ background: 'white', width: '100%', maxWidth: '800px', maxHeight: '80vh', borderRadius: '20px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ background: 'white', width: '100%', height: '85vh', borderTopLeftRadius: '20px', borderTopRightRadius: '20px', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '20px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}><Sparkles size={18} color="#4F46E5" /> AI 重构报告</h3>
-              <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X /></button>
+              <h3 style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px' }}><Sparkles size={18} color="#4F46E5" /> AI 重构报告</h3>
+              <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none' }}><X size={20} /></button>
             </div>
-            <div style={{ padding: '20px', overflowY: 'auto', flex: 1, whiteSpace: 'pre-wrap', lineHeight: 1.8, color: '#334155' }}>
+            <div style={{ padding: '20px', overflowY: 'auto', flex: 1, whiteSpace: 'pre-wrap', lineHeight: 1.8, color: '#334155', fontSize: '15px' }}>
               {aiLoading ? (
                 <div style={{ textAlign: 'center', padding: '40px' }}>
                   <Loader2 className="animate-spin" style={{ margin: '0 auto 16px', color: '#4F46E5' }} size={32} />
@@ -291,12 +278,12 @@ function App() {
               ) : aiResult}
             </div>
             {!aiLoading && (
-              <div style={{ padding: '16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', textAlign: 'right' }}>
+              <div style={{ padding: '16px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'center' }}>
                 <button 
-                  onClick={() => { navigator.clipboard.writeText(aiResult); alert("已复制到剪贴板！") }}
-                  style={{ background: 'white', border: '1px solid #e2e8f0', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer' }}
+                  onClick={() => { navigator.clipboard.writeText(aiResult); alert("已复制！") }}
+                  style={{ width: '100%', background: 'white', border: '1px solid #e2e8f0', padding: '12px', borderRadius: '10px', fontSize: '15px', fontWeight: '500', display: 'flex', justifyContent: 'center', gap: '8px' }}
                 >
-                  <Copy size={16} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> 复制报告
+                  <Copy size={18} /> 复制报告
                 </button>
               </div>
             )}
