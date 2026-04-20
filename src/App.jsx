@@ -3,7 +3,7 @@ import {
   Search, LogOut, Sparkles, X, Copy, 
   Loader2, CheckCircle2, Circle, FileText, 
   ShieldCheck, ArrowLeft, Trash2, PenLine, Database, Plus,
-  Lock, Globe // 新增图标用于区分公私
+  Lock, Globe 
 } from 'lucide-react'
 import { supabase } from './supabaseClient'
 
@@ -24,7 +24,7 @@ function App() {
   // 随心记（快速录入）状态
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false)
   const [quickNote, setQuickNote] = useState("")
-  const [quickNoteVisibility, setQuickNoteVisibility] = useState("private") // 新增：公私状态选择
+  const [quickNoteVisibility, setQuickNoteVisibility] = useState("private")
   const [noteLoading, setNoteLoading] = useState(false)
   
   // 角色与看板状态
@@ -61,7 +61,6 @@ function App() {
     setRole(userRole)
 
     if (userRole === 'superadmin') {
-      // 这里的 count 已经受到了上面 SQL 中 RLS 策略的保护，只会查到你有权限看的数据总量
       const { count } = await supabase.from('asset_chunks').select('*', { count: 'exact', head: true })
       setStats({ totalAssets: count || 0 })
     }
@@ -83,7 +82,6 @@ function App() {
     const keywords = currentQuery.split(/[\s,，]+/).filter(k => k.trim() !== '');
 
     try {
-      // Supabase 的 RLS 策略会自动在这里拦截并只返回：所有的 public 数据 + 你自己的 private 数据
       let query = supabase.from('asset_chunks').select('*').limit(100);
       
       if (keywords.length > 0) {
@@ -153,7 +151,7 @@ function App() {
     );
   };
 
-  // ================= 核心功能 3：白标化 AI 重构 (仅限超级管理员) =================
+  // ================= 核心功能 3：白标化 AI 重构 =================
   const handleReconstruct = async () => {
     if (role !== 'superadmin') return alert("权限不足");
 
@@ -177,7 +175,7 @@ function App() {
           'Content-Type': 'application/json' 
         },
         body: JSON.stringify({
-          model: "llama-3.3-70b-versatile", // 底层调用，绝对不在 UI 暴露
+          model: "llama-3.3-70b-versatile",
           messages: [
             { role: "system", content: "你是一个资深知识主编，请将素材进行语义去重并重构为逻辑连贯的Markdown报告。要求：保留专业术语，去除废话，排版清晰美观。" },
             { role: "user", content: selectedContent }
@@ -195,16 +193,17 @@ function App() {
     }
   }
 
-  // ================= 核心功能 4：随心说直入数据库 (支持公私标签真实入库) =================
+  // ================= 核心功能 4：随心说直入数据库 =================
   const handleAddQuickNote = async () => {
     if (!quickNote.trim()) return alert("请输入内容");
     setNoteLoading(true);
 
     try {
       const { error } = await supabase.from('asset_chunks').insert({
+        id: crypto.randomUUID(), // 🟢 核心修复点：前端主动生成一个唯一的 ID，满足数据库的 non-null 要求
         content: quickNote.trim(),
-        user_id: session.user.id, // 明确宣告数据主权，防 RLS 拦截
-        visibility: quickNoteVisibility // 真实写入公有或私有状态
+        user_id: session.user.id, 
+        visibility: quickNoteVisibility 
       });
       if (error) throw error;
 
@@ -234,7 +233,6 @@ function App() {
     alert("已复制选中的内容！");
   }
 
-  // 绝对纯净的登录
   const handleEmailLogin = async (e) => {
     e.preventDefault();
     if (!email || !password) return alert("请输入账号和密码");
@@ -246,7 +244,6 @@ function App() {
 
   // ================= 界面渲染区 =================
 
-  // 🟢 极其纯净的登录门禁
   if (!session) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f5f9', padding: '20px' }}>
@@ -285,11 +282,9 @@ function App() {
     )
   }
 
-  // 🟢 主界面
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9', paddingBottom: '120px' }}>
       
-      {/* 顶部导航 */}
       <header style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(0,0,0,0.05)', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 40 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <img src="/logo.png" alt="Logo" style={{ width: '26px', height: '26px', objectFit: 'contain', borderRadius: '6px' }} />
@@ -311,7 +306,6 @@ function App() {
 
       <main style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', boxSizing: 'border-box' }}>
         
-        {/* 超级管理员专属看板与随心记 */}
         {role === 'superadmin' && (
           <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
             <div style={{ flex: 1, background: 'white', padding: '16px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.02)', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -334,7 +328,6 @@ function App() {
           </div>
         )}
 
-        {/* 搜索区域 */}
         <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', width: '100%' }}>
           <div style={{ flex: '1', position: 'relative' }}>
             <Search style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={20} />
@@ -356,7 +349,6 @@ function App() {
           </button>
         </div>
 
-        {/* 沉浸式卡片列表 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {results.length > 0 ? (
             results.map((item) => {
@@ -388,8 +380,6 @@ function App() {
                             命中 {item._matchScore} 次
                           </span>
                         )}
-                        
-                        {/* 根据数据库真实记录显示公/私标签 */}
                         {item.visibility === 'private' ? (
                           <span style={{ fontSize: '12px', color: '#10b981', fontWeight: 'bold', background: '#d1fae5', padding: '2px 8px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <Lock size={12} /> 私密数据
@@ -418,7 +408,6 @@ function App() {
           )}
         </div>
 
-        {/* 底部悬浮操作栏 */}
         {selectedIds.length > 0 && (
           <div style={{ 
             position: 'fixed', bottom: '30px', left: '0', right: '0', margin: '0 auto', 
@@ -454,7 +443,7 @@ function App() {
         )}
       </main>
 
-      {/* ================= 新增支持公私设置的随心记模态框 ================= */}
+      {/* ================= 修复后：随心记模态框 ================= */}
       {isNoteModalOpen && (
         <div 
           onClick={(e) => { if(e.target === e.currentTarget) setIsNoteModalOpen(false) }} 
@@ -471,8 +460,6 @@ function App() {
             </div>
             
             <div style={{ padding: '24px', background: '#fafafa' }}>
-              
-              {/* 权限公私选择 UI */}
               <div style={{ display: 'flex', gap: '20px', marginBottom: '16px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '15px', color: quickNoteVisibility === 'private' ? '#10b981' : '#64748b', fontWeight: quickNoteVisibility === 'private' ? 'bold' : 'normal' }}>
                   <input 
@@ -526,7 +513,6 @@ function App() {
         </div>
       )}
 
-      {/* 优化的 AI 结果弹窗 (锁定背景、防漂浮) */}
       {isModalOpen && (
         <div 
           onClick={(e) => { if(e.target === e.currentTarget) setIsModalOpen(false) }} 
