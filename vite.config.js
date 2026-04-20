@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate', // 自动更新 Service Worker
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'], // 静态资源
+      // includeAssets: ['favicon.ico', 'apple-touch-icon.png'], // 静态资源
       manifest: {
         name: 'Brain Vault',
         short_name: 'BrainVault',
