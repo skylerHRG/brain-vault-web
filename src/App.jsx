@@ -40,7 +40,7 @@ function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // 🌟 修复点 3：底层滚动锁定防漂浮（当弹窗打开时，禁止背后页面滑动）
+  // 底层滚动锁定防漂浮（当弹窗打开时，禁止背后页面滑动）
   useEffect(() => {
     if (isModalOpen) {
       document.body.style.overflow = 'hidden';
@@ -135,7 +135,8 @@ function App() {
 
     setIsModalOpen(true)
     setAiLoading(true)
-    setAiResult("🚀 正在呼叫 Llama 3.3 70B 模型重构知识，请稍候...")
+    // 抹除底层模型名称，采用专业的话术
+    setAiResult("🚀 正在智能提炼并重构知识，请稍候...")
 
     try {
       const apiKey = import.meta.env.VITE_GROQ_API_KEY;
@@ -148,7 +149,7 @@ function App() {
           'Content-Type': 'application/json' 
         },
         body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
+          model: "llama-3.3-70b-versatile", // 仅在代码底层保留实际调用参数
           messages: [
             { role: "system", content: "你是一个资深知识主编，请将素材进行语义去重并重构为逻辑连贯的Markdown报告。要求：保留专业术语，去除废话，排版清晰美观。" },
             { role: "user", content: selectedContent }
@@ -156,7 +157,7 @@ function App() {
         })
       });
 
-      if (!response.ok) throw new Error("AI 响应异常");
+      if (!response.ok) throw new Error("智能生成响应异常");
       const data = await response.json();
       setAiResult(data.choices[0].message.content);
     } catch (e) { 
@@ -236,7 +237,7 @@ function App() {
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9', paddingBottom: '120px' }}>
       
-      {/* 🌟 修复点 1：顶部恢复超级管理员特权徽章显示 */}
+      {/* 顶部恢复超级管理员特权徽章显示 */}
       <header style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(0,0,0,0.05)', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 40 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <img src="/logo.png" alt="Logo" style={{ width: '26px', height: '26px', objectFit: 'contain', borderRadius: '6px' }} />
@@ -347,28 +348,28 @@ function App() {
               onClick={handleReconstruct}
               style={{ background: '#4F46E5', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '100px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(79, 70, 229, 0.4)' }}
             >
-              <Sparkles size={18} /> AI 生成报告
+              <Sparkles size={18} /> 生成报告
             </button>
           </div>
         )}
       </main>
 
-      {/* 🌟 修复点 2 & 3：优化的 AI 结果弹窗 (锁定背景、双重返回键、强制防溢出) */}
+      {/* 优化的 AI 结果弹窗 (锁定背景、双重返回键、强制防溢出) */}
       {isModalOpen && (
         <div 
-          onClick={(e) => { if(e.target === e.currentTarget) setIsModalOpen(false) }} // 点击深色背景关闭
+          onClick={(e) => { if(e.target === e.currentTarget) setIsModalOpen(false) }} 
           style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px', boxSizing: 'border-box' }}
         >
           <div style={{ background: 'white', width: '100%', maxWidth: '800px', maxHeight: '90vh', borderRadius: '24px', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
             
-            {/* 弹窗头部：增加清晰的返回按钮 */}
+            {/* 弹窗头部：去模型化的专业文案 */}
             <div style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', background: 'white' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <button onClick={() => setIsModalOpen(false)} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#334155', fontWeight: '600' }}>
                   <ArrowLeft size={18} /> 返回
                 </button>
                 <h3 style={{ fontWeight: '800', fontSize: '17px', color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Sparkles size={18} color="#4F46E5" /> 知识融合
+                  <Sparkles size={18} color="#4F46E5" /> 知识融合报告
                 </h3>
               </div>
               <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', display: 'flex', cursor: 'pointer', color: '#94a3b8' }}>
@@ -403,7 +404,7 @@ function App() {
                   onClick={() => { navigator.clipboard.writeText(aiResult); alert("报告已复制！") }}
                   style={{ flex: 2, background: '#0f172a', color: 'white', border: 'none', padding: '16px', borderRadius: '14px', fontSize: '16px', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}
                 >
-                  <Copy size={20} /> 复制全部内容
+                  <Copy size={20} /> 复制报告内容
                 </button>
               </div>
             )}
