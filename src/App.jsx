@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { 
   Search, LogOut, Sparkles, X, Copy, 
   Loader2, CheckCircle2, Circle, FileText, 
-  ShieldCheck, ArrowLeft, Trash2, PenLine, Database, Plus
+  ShieldCheck, ArrowLeft, Trash2, PenLine, Database, Plus,
+  Lock, Globe // 新增图标用于区分公私
 } from 'lucide-react'
 import { supabase } from './supabaseClient'
 
@@ -23,6 +24,7 @@ function App() {
   // 随心记（快速录入）状态
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false)
   const [quickNote, setQuickNote] = useState("")
+  const [quickNoteVisibility, setQuickNoteVisibility] = useState("private") // 新增：公私状态选择
   const [noteLoading, setNoteLoading] = useState(false)
   
   // 角色与看板状态
@@ -40,7 +42,7 @@ function App() {
       setSession(session)
       if (session) {
         fetchRoleAndStats(session.user.id)
-        handleSearch("", true) // 登录后自动展示最新内容
+        handleSearch("", true)
       }
       setLoading(false)
     })
@@ -53,21 +55,18 @@ function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // 获取用户角色与超级看板数据
   const fetchRoleAndStats = async (userId) => {
-    // 查权限
     const { data } = await supabase.from('profiles').select('role').eq('id', userId).single()
     const userRole = data ? data.role : 'user'
     setRole(userRole)
 
-    // 如果是超级管理员，查询数据库总资产量作为看板数据
     if (userRole === 'superadmin') {
+      // 这里的 count 已经受到了上面 SQL 中 RLS 策略的保护，只会查到你有权限看的数据总量
       const { count } = await supabase.from('asset_chunks').select('*', { count: 'exact', head: true })
       setStats({ totalAssets: count || 0 })
     }
   }
 
-  // 底层滚动锁定防漂浮
   useEffect(() => {
     if (isModalOpen || isNoteModalOpen) {
       document.body.style.overflow = 'hidden';
@@ -84,6 +83,7 @@ function App() {
     const keywords = currentQuery.split(/[\s,，]+/).filter(k => k.trim() !== '');
 
     try {
+      // Supabase 的 RLS 策略会自动在这里拦截并只返回：所有的 public 数据 + 你自己的 private 数据
       let query = supabase.from('asset_chunks').select('*').limit(100);
       
       if (keywords.length > 0) {
@@ -153,7 +153,7 @@ function App() {
     );
   };
 
-  // ================= 核心功能 3：AI 重构 (仅限超级管理员) =================
+  // ================= 核心功能 3：白标化 AI 重构 (仅限超级管理员) =================
   const handleReconstruct = async () => {
     if (role !== 'superadmin') return alert("权限不足");
 
@@ -177,7 +177,7 @@ function App() {
           'Content-Type': 'application/json' 
         },
         body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
+          model: "llama-3.3-70b-versatile", // 底层调用，绝对不在 UI 暴露
           messages: [
             { role: "system", content: "你是一个资深知识主编，请将素材进行语义去重并重构为逻辑连贯的Markdown报告。要求：保留专业术语，去除废话，排版清晰美观。" },
             { role: "user", content: selectedContent }
@@ -195,7 +195,7 @@ function App() {
     }
   }
 
-  // ================= 核心功能 4：随心说直入数据库 (仅限超级管理员) =================
+  // ================= 核心功能 4：随心说直入数据库 (支持公私标签真实入库) =================
   const handleAddQuickNote = async () => {
     if (!quickNote.trim()) return alert("请输入内容");
     setNoteLoading(true);
@@ -203,15 +203,16 @@ function App() {
     try {
       const { error } = await supabase.from('asset_chunks').insert({
         content: quickNote.trim(),
-        // 假设表里有设定 id 为 uuid 默认生成，和 created_at 默认生成
+        user_id: session.user.id, // 明确宣告数据主权，防 RLS 拦截
+        visibility: quickNoteVisibility // 真实写入公有或私有状态
       });
       if (error) throw error;
 
-      alert("🎉 随笔已成功存入数据库！");
+      alert(`🎉 已成功作为【${quickNoteVisibility === 'private' ? '私密' : '公开'}】数据存入知识库！`);
       setQuickNote("");
       setIsNoteModalOpen(false);
-      handleSearch("", true); // 刷新列表
-      if (role === 'superadmin') fetchRoleAndStats(session.user.id); // 刷新看板数字
+      handleSearch("", true);
+      if (role === 'superadmin') fetchRoleAndStats(session.user.id);
     } catch (e) {
       alert("存入失败: " + e.message);
     } finally {
@@ -219,7 +220,6 @@ function App() {
     }
   }
 
-  // 基础多选逻辑与普通用户复制功能
   const toggleSelection = (id) => {
     if (selectedIds.includes(id)) setSelectedIds(selectedIds.filter(item => item !== id));
     else setSelectedIds([...selectedIds, id]);
@@ -234,7 +234,7 @@ function App() {
     alert("已复制选中的内容！");
   }
 
-  // 纯粹的管理员密码登录
+  // 绝对纯净的登录
   const handleEmailLogin = async (e) => {
     e.preventDefault();
     if (!email || !password) return alert("请输入账号和密码");
@@ -289,7 +289,7 @@ function App() {
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9', paddingBottom: '120px' }}>
       
-      {/* 顶部导航 (动态显示权限徽章) */}
+      {/* 顶部导航 */}
       <header style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(0,0,0,0.05)', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 40 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <img src="/logo.png" alt="Logo" style={{ width: '26px', height: '26px', objectFit: 'contain', borderRadius: '6px' }} />
@@ -297,7 +297,6 @@ function App() {
             <h1 style={{ fontSize: '17px', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.3px', margin: 0, lineHeight: 1.2 }}>
               Brain Vault
             </h1>
-            {/* 仅限超级管理员显示身份徽章 */}
             {role === 'superadmin' && (
               <span style={{ fontSize: '11px', color: '#4F46E5', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '2px' }}>
                 <ShieldCheck size={12} /> Super Admin
@@ -312,10 +311,9 @@ function App() {
 
       <main style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', boxSizing: 'border-box' }}>
         
-        {/* 🌟 仅限超级管理员看见的专属功能栏（看板 + 随心说）🌟 */}
+        {/* 超级管理员专属看板与随心记 */}
         {role === 'superadmin' && (
           <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-            {/* 数据看板 */}
             <div style={{ flex: 1, background: 'white', padding: '16px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.02)', display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{ background: '#EEF2FF', padding: '10px', borderRadius: '12px', color: '#4F46E5' }}>
                 <Database size={20} />
@@ -326,7 +324,6 @@ function App() {
               </div>
             </div>
             
-            {/* 随心说入口 */}
             <div 
               onClick={() => setIsNoteModalOpen(true)}
               style={{ background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)', color: 'white', padding: '16px', borderRadius: '16px', boxShadow: '0 8px 20px rgba(79, 70, 229, 0.25)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, width: '100px' }}
@@ -364,6 +361,7 @@ function App() {
           {results.length > 0 ? (
             results.map((item) => {
               const isSelected = selectedIds.includes(item.id);
+              
               return (
                 <div 
                   key={item.id} 
@@ -384,11 +382,24 @@ function App() {
                       {isSelected ? <CheckCircle2 size={24} color="#4F46E5" fill="#EEF2FF" /> : <Circle size={24} color="#cbd5e1" />}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      {item._matchScore > 0 && (
-                        <span style={{ fontSize: '12px', color: '#ef4444', fontWeight: 'bold', background: '#fee2e2', padding: '2px 8px', borderRadius: '10px', marginBottom: '8px', display: 'inline-block' }}>
-                          匹配命中: {item._matchScore} 次
-                        </span>
-                      )}
+                      <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                        {item._matchScore > 0 && (
+                          <span style={{ fontSize: '12px', color: '#ef4444', fontWeight: 'bold', background: '#fee2e2', padding: '2px 8px', borderRadius: '10px' }}>
+                            命中 {item._matchScore} 次
+                          </span>
+                        )}
+                        
+                        {/* 根据数据库真实记录显示公/私标签 */}
+                        {item.visibility === 'private' ? (
+                          <span style={{ fontSize: '12px', color: '#10b981', fontWeight: 'bold', background: '#d1fae5', padding: '2px 8px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Lock size={12} /> 私密数据
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '12px', color: '#3b82f6', fontWeight: 'bold', background: '#dbeafe', padding: '2px 8px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Globe size={12} /> 公开资源
+                          </span>
+                        )}
+                      </div>
                       <p style={{ color: isSelected ? '#1e1b4b' : '#334155', lineHeight: 1.6, fontSize: '15px', margin: 0, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
                         {highlightText(item.content)}
                       </p>
@@ -407,7 +418,7 @@ function App() {
           )}
         </div>
 
-        {/* 底部悬浮操作栏 (权限差异化显示) */}
+        {/* 底部悬浮操作栏 */}
         {selectedIds.length > 0 && (
           <div style={{ 
             position: 'fixed', bottom: '30px', left: '0', right: '0', margin: '0 auto', 
@@ -424,7 +435,6 @@ function App() {
               </button>
             </div>
             
-            {/* 如果是超级管理员，显示 AI 生成报告按钮 */}
             {role === 'superadmin' ? (
               <button 
                 onClick={handleReconstruct}
@@ -433,7 +443,6 @@ function App() {
                 <Sparkles size={18} /> 生成报告
               </button>
             ) : (
-              /* 如果是普通测试用户，只显示复制按钮 */
               <button 
                 onClick={handleCopyNormal}
                 style={{ background: 'white', color: '#0f172a', border: 'none', padding: '10px 20px', borderRadius: '100px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', cursor: 'pointer' }}
@@ -445,7 +454,7 @@ function App() {
         )}
       </main>
 
-      {/* 🌟 专属模态框：随心记 (闪念胶囊) 🌟 */}
+      {/* ================= 新增支持公私设置的随心记模态框 ================= */}
       {isNoteModalOpen && (
         <div 
           onClick={(e) => { if(e.target === e.currentTarget) setIsNoteModalOpen(false) }} 
@@ -460,14 +469,43 @@ function App() {
                 <X size={24} />
               </button>
             </div>
+            
             <div style={{ padding: '24px', background: '#fafafa' }}>
+              
+              {/* 权限公私选择 UI */}
+              <div style={{ display: 'flex', gap: '20px', marginBottom: '16px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '15px', color: quickNoteVisibility === 'private' ? '#10b981' : '#64748b', fontWeight: quickNoteVisibility === 'private' ? 'bold' : 'normal' }}>
+                  <input 
+                    type="radio" 
+                    name="visibility" 
+                    value="private" 
+                    checked={quickNoteVisibility === 'private'} 
+                    onChange={(e) => setQuickNoteVisibility(e.target.value)} 
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <Lock size={16} /> 仅自己可见
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '15px', color: quickNoteVisibility === 'public' ? '#3b82f6' : '#64748b', fontWeight: quickNoteVisibility === 'public' ? 'bold' : 'normal' }}>
+                  <input 
+                    type="radio" 
+                    name="visibility" 
+                    value="public" 
+                    checked={quickNoteVisibility === 'public'} 
+                    onChange={(e) => setQuickNoteVisibility(e.target.value)} 
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <Globe size={16} /> 公开分享
+                </label>
+              </div>
+
               <textarea 
-                placeholder="在此迅速记下闪念、灵感或零碎信息..." 
+                placeholder="在此迅速记下闪念、灵感或私人信息..." 
                 value={quickNote}
                 onChange={(e) => setQuickNote(e.target.value)}
-                style={{ width: '100%', height: '150px', padding: '16px', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none', resize: 'none', fontSize: '16px', lineHeight: 1.6, fontFamily: 'inherit', boxSizing: 'border-box' }}
+                style={{ width: '100%', height: '140px', padding: '16px', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none', resize: 'none', fontSize: '16px', lineHeight: 1.6, fontFamily: 'inherit', boxSizing: 'border-box' }}
               />
             </div>
+
             <div style={{ padding: '20px 24px', background: 'white', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '12px' }}>
               <button 
                 onClick={() => setIsNoteModalOpen(false)}
