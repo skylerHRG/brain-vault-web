@@ -9,6 +9,8 @@ import { supabase } from './supabaseClient'
 function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [isSearching, setIsSearching] = useState(false) // 新增：搜索中状态
+  const [hasSearched, setHasSearched] = useState(false) // 新增：是否搜索过
   const [results, setResults] = useState([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedIds, setSelectedIds] = useState([])
@@ -26,13 +28,19 @@ function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      if (session) fetchRole(session.user.id)
+      if (session) {
+        fetchRole(session.user.id)
+        // 登录后自动触发一次空搜索，展示最新内容
+        handleSearch("", true)
+      }
       setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
-      if (session) fetchRole(session.user.id)
+      if (session) {
+        fetchRole(session.user.id)
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -40,7 +48,7 @@ function App() {
 
   // 获取用户角色
   const fetchRole = async (userId) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', userId)
@@ -48,23 +56,44 @@ function App() {
     if (data) setRole(data.role)
   }
 
-  // 搜索逻辑
-  const handleSearch = async () => {
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('asset_chunks')
-      .select('*')
-      .ilike('content', `%${searchQuery}%`)
-      .limit(20)
+  // 强大的搜索逻辑 (带异常捕获)
+  const handleSearch = async (overrideQuery = null, isInitial = false) => {
+    setIsSearching(true)
+    const currentQuery = overrideQuery !== null ? overrideQuery : searchQuery;
     
-    if (!error) setResults(data)
-    setLoading(false)
+    try {
+      const { data, error } = await supabase
+        .from('asset_chunks')
+        .select('*')
+        .ilike('content', `%${currentQuery}%`)
+        .limit(20)
+      
+      if (error) {
+        // 如果是数据库权限/策略报错，直接弹窗显示！不再装死。
+        alert("数据库查询被拒绝或发生错误: \n" + error.message);
+        console.error("Supabase Error:", error);
+      } else {
+        setResults(data || [])
+      }
+    } catch (err) {
+      alert("网络异常: " + err.message);
+    } finally {
+      setIsSearching(false)
+      if (!isInitial) setHasSearched(true)
+    }
+  }
+
+  // 键盘回车事件
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleSearch()
+    }
   }
 
   // AI 重构逻辑
   const handleReconstruct = async () => {
     if (role !== 'superadmin') {
-      alert("抱歉，只有超级管理员 (superadmin) 可以使用 AI 重构功能。");
+      alert("抱歉，由于算力成本高昂，系统仅对超级管理员 (superadmin) 开放 AI 重构。请在数据库 profiles 表中修改您的权限。");
       return;
     }
     
@@ -181,35 +210,54 @@ function App() {
             <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={18} />
             <input 
               type="text" 
-              placeholder="搜索您的知识资产..." 
+              placeholder="搜索您的知识资产... (按回车检索)" 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
               style={{ width: '100%', padding: '12px 12px 12px 40px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none' }}
             />
           </div>
-          <button onClick={handleSearch} style={{ background: '#4F46E5', color: 'white', padding: '0 24px', borderRadius: '10px', border: 'none', fontWeight: '600', cursor: 'pointer' }}>检索</button>
+          <button 
+            onClick={() => handleSearch()} 
+            disabled={isSearching}
+            style={{ background: '#4F46E5', color: 'white', padding: '0 24px', borderRadius: '10px', border: 'none', fontWeight: '600', cursor: isSearching ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            {isSearching ? <Loader2 size={16} className="animate-spin" /> : null}
+            {isSearching ? '检索中' : '检索'}
+          </button>
         </div>
 
-        {/* 搜索结果 */}
+        {/* 搜索结果区域 */}
         <div style={{ display: 'grid', gap: '16px' }}>
-          {results.map(item => (
-            <div key={item.id} style={{ background: 'white', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                <input 
-                  type="checkbox" 
-                  checked={selectedIds.includes(item.id)}
-                  onChange={(e) => {
-                    if (e.target.checked) setSelectedIds([...selectedIds, item.id])
-                    else setSelectedIds(selectedIds.filter(id => id !== item.id))
-                  }}
-                  style={{ marginTop: '4px', cursor: 'pointer' }}
-                />
-                <div style={{ flex: 1 }}>
-                  <p style={{ color: '#334155', lineHeight: 1.6 }}>{item.content}</p>
+          {results.length > 0 ? (
+            results.map(item => (
+              <div key={item.id} style={{ background: 'white', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={selectedIds.includes(item.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) setSelectedIds([...selectedIds, item.id])
+                      else setSelectedIds(selectedIds.filter(id => id !== item.id))
+                    }}
+                    style={{ marginTop: '4px', cursor: 'pointer' }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <p style={{ color: '#334155', lineHeight: 1.6 }}>{item.content}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          ) : (
+            // 空状态提示
+            !isSearching && hasSearched && (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
+                <FileText size={48} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+                <p>未能找到相关的素材内容</p>
+                <p style={{ fontSize: '14px', marginTop: '8px' }}>可能是数据库为空，或您的新账号暂无读取权限</p>
+              </div>
+            )
+          )}
         </div>
 
         {/* 浮动操作栏 */}
