@@ -110,7 +110,7 @@ function App() {
     }
   }
 
-  // 邮箱登录
+  // 纯净版：仅保留账号密码登录
   const handleEmailLogin = async (e) => {
     e.preventDefault();
     if (!email || !password) return alert("请输入邮箱和密码");
@@ -120,18 +120,7 @@ function App() {
     setAuthLoading(false);
   };
 
-  // 邮箱注册
-  const handleEmailSignUp = async (e) => {
-    e.preventDefault();
-    if (!email || !password) return alert("请输入邮箱和密码");
-    setAuthLoading(true);
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) alert("注册失败: " + error.message);
-    else alert("注册成功！如果无法直接登录，请前往 Supabase 后台关闭邮箱验证(Confirm email)选项。");
-    setAuthLoading(false);
-  };
-
-  // ================= 登录界面 =================
+  // ================= 纯净私有化登录界面 =================
   if (!session) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
@@ -142,55 +131,30 @@ function App() {
           <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e293b', marginBottom: '8px' }}>Brain Vault</h2>
           <p style={{ color: '#64748b', marginBottom: '30px' }}>个人数字资产中枢</p>
           
-          <form style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
+          <form style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} onSubmit={handleEmailLogin}>
             <input 
               type="email" 
-              placeholder="请输入邮箱" 
+              placeholder="管理员邮箱" 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', boxSizing: 'border-box' }}
             />
             <input 
               type="password" 
-              placeholder="请输入密码" 
+              placeholder="密码" 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', outline: 'none', boxSizing: 'border-box' }}
             />
             
-            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-              <button 
-                onClick={handleEmailLogin}
-                disabled={authLoading}
-                style={{ flex: 1, background: '#4F46E5', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: authLoading ? 'not-allowed' : 'pointer' }}
-              >
-                {authLoading ? '处理中...' : '登录'}
-              </button>
-              <button 
-                onClick={handleEmailSignUp}
-                disabled={authLoading}
-                style={{ flex: 1, background: 'white', color: '#4F46E5', padding: '12px', borderRadius: '8px', border: '1px solid #4F46E5', fontWeight: '600', cursor: authLoading ? 'not-allowed' : 'pointer' }}
-              >
-                注册
-              </button>
-            </div>
+            <button 
+              type="submit"
+              disabled={authLoading}
+              style={{ width: '100%', background: '#4F46E5', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: authLoading ? 'not-allowed' : 'pointer', marginTop: '8px' }}
+            >
+              {authLoading ? '验证中...' : '安全登录'}
+            </button>
           </form>
-
-          <div style={{ position: 'relative', margin: '20px 0' }}>
-            <div style={{ position: 'absolute', inset: '0', display: 'flex', alignItems: 'center' }}>
-              <div style={{ width: '100%', borderTop: '1px solid #e2e8f0' }}></div>
-            </div>
-            <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', fontSize: '14px' }}>
-              <span style={{ background: 'white', padding: '0 10px', color: '#94a3b8' }}>或</span>
-            </div>
-          </div>
-
-          <button 
-            onClick={() => supabase.auth.signInWithOAuth({ provider: 'github' })}
-            style={{ width: '100%', background: '#1e293b', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
-          >
-            使用 GitHub 登录
-          </button>
         </div>
       </div>
     )
