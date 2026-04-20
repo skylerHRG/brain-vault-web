@@ -27,9 +27,7 @@ function App() {
   const [aiResult, setAiResult] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
-<p style={{ color: import.meta.env.VITE_GROQ_API_KEY ? 'green' : 'red' }}>
-  🔑 密钥状态检测: {import.meta.env.VITE_GROQ_API_KEY ? '✅ 成功读取' : '❌ 仍然是 undefined'}
-</p>
+
   // --- 1. 初始化与身份监听 ---
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
