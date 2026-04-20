@@ -10,7 +10,7 @@ export default defineConfig({
       manifest: {
         name: 'Brain Vault',
         short_name: 'BrainVault',
-        description: '个人数字资产管理中枢',
+        description: '个人数字资产管理',
         theme_color: '#4F46E5',
         background_color: '#f8fafc',
         display: 'standalone',
