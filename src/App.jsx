@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { 
   Search, LogOut, Sparkles, X, Copy, 
-  Loader2, CheckCircle2, Circle, FileText
+  Loader2, CheckCircle2, Circle, FileText, 
+  ShieldCheck, ArrowLeft, Trash2
 } from 'lucide-react'
 import { supabase } from './supabaseClient'
 
@@ -13,6 +14,8 @@ function App() {
   const [results, setResults] = useState([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedIds, setSelectedIds] = useState([])
+  
+  // AI 弹窗相关状态
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResult, setAiResult] = useState("")
@@ -26,7 +29,7 @@ function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      if (session) handleSearch("", true) // 登录后自动展示最新内容
+      if (session) handleSearch("", true)
       setLoading(false)
     })
 
@@ -37,18 +40,25 @@ function App() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // 🌟 修复点 3：底层滚动锁定防漂浮（当弹窗打开时，禁止背后页面滑动）
+  useEffect(() => {
+    if (isModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => { document.body.style.overflow = 'unset'; }
+  }, [isModalOpen])
+
   // ================= 核心功能 1：多词条智能搜索与排序 =================
   const handleSearch = async (overrideQuery = null, isInitial = false) => {
     setIsSearching(true)
     const currentQuery = overrideQuery !== null ? overrideQuery : searchQuery;
-    
-    // 解析关键字：支持空格和逗号分隔，过滤空词
     const keywords = currentQuery.split(/[\s,，]+/).filter(k => k.trim() !== '');
 
     try {
       let query = supabase.from('asset_chunks').select('*').limit(100);
       
-      // 如果有关键字，构建 OR 查询逻辑以扩大命中面
       if (keywords.length > 0) {
         const orString = keywords.map(kw => `content.ilike.%${kw}%`).join(',');
         query = query.or(orString);
@@ -61,7 +71,6 @@ function App() {
 
       let processedData = data || [];
 
-      // 如果有关键字，在前端进行精确打分与排序 (出现次数越多越靠前)
       if (keywords.length > 0 && processedData.length > 0) {
         processedData = processedData.map(item => {
           let score = 0;
@@ -77,7 +86,6 @@ function App() {
           });
           return { ...item, _matchScore: score };
         });
-        // 按匹配度降序排序
         processedData.sort((a, b) => b._matchScore - a._matchScore);
       }
 
@@ -91,7 +99,6 @@ function App() {
     }
   }
 
-  // 回车键触发搜索
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -99,12 +106,11 @@ function App() {
     }
   }
 
-  // ================= 核心功能 2：关键字黄色高亮渲染器 =================
+  // ================= 核心功能 2：关键字高亮 =================
   const highlightText = (text) => {
     const keywords = searchQuery.split(/[\s,，]+/).filter(k => k.trim() !== '');
     if (keywords.length === 0) return text;
 
-    // 安全转义正则表达式字符
     const safeKeywords = keywords.map(kw => kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
     const regex = new RegExp(`(${safeKeywords.join('|')})`, 'gi');
     const parts = text.split(regex);
@@ -124,12 +130,12 @@ function App() {
   const handleReconstruct = async () => {
     const selectedContent = results
       .filter(item => selectedIds.includes(item.id))
-      .map((item, i) => `【素材${i + 1}】: ${item.content}`)
-      .join('\n\n');
+      .map((item, i) => `【素材${i + 1}】:\n${item.content}`)
+      .join('\n\n---\n\n');
 
     setIsModalOpen(true)
     setAiLoading(true)
-    setAiResult("🚀 正在唤醒 Llama 3.3 70B 模型重构知识，请稍候...")
+    setAiResult("🚀 正在呼叫 Llama 3.3 70B 模型重构知识，请稍候...")
 
     try {
       const apiKey = import.meta.env.VITE_GROQ_API_KEY;
@@ -142,7 +148,7 @@ function App() {
           'Content-Type': 'application/json' 
         },
         body: JSON.stringify({
-          model: "llama-3.3-70b-versatile", // 确认使用最新模型
+          model: "llama-3.3-70b-versatile",
           messages: [
             { role: "system", content: "你是一个资深知识主编，请将素材进行语义去重并重构为逻辑连贯的Markdown报告。要求：保留专业术语，去除废话，排版清晰美观。" },
             { role: "user", content: selectedContent }
@@ -169,7 +175,12 @@ function App() {
     }
   }
 
-  // 核心功能 1（入口）：纯粹的管理员密码登录
+  // 清空选择
+  const clearSelection = () => {
+    setSelectedIds([]);
+  }
+
+  // 纯粹的管理员密码登录
   const handleEmailLogin = async (e) => {
     e.preventDefault();
     if (!email || !password) return alert("请输入账号和密码");
@@ -189,29 +200,29 @@ function App() {
           <div style={{ background: 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)', width: '72px', height: '72px', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', boxShadow: '0 8px 16px rgba(79, 70, 229, 0.2)' }}>
              <img src="/logo.png" alt="Logo" style={{ width: '40px', height: '40px', objectFit: 'contain' }} />
           </div>
-          <h2 style={{ fontSize: '26px', fontWeight: '800', color: '#0f172a', marginBottom: '8px', letterSpacing: '-0.5px' }}>Brain Vault <span style={{ fontSize: '12px', color: '#4F46E5', verticalAlign: 'middle' }}>v2.0</span></h2>
+          <h2 style={{ fontSize: '26px', fontWeight: '800', color: '#0f172a', marginBottom: '8px', letterSpacing: '-0.5px' }}>Brain Vault</h2>
           <p style={{ color: '#64748b', fontSize: '15px', marginBottom: '32px' }}>私有数字资产中枢</p>
           
           <form style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} onSubmit={handleEmailLogin}>
             <input 
               type="email" 
-              placeholder="管理员账号 (Email)" 
+              placeholder="系统账号" 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              style={{ width: '100%', padding: '16px', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none', boxSizing: 'border-box', fontSize: '16px', background: '#f8fafc', transition: 'all 0.2s' }}
+              style={{ width: '100%', padding: '16px', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none', boxSizing: 'border-box', fontSize: '16px', background: '#f8fafc' }}
             />
             <input 
               type="password" 
               placeholder="访问密码" 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={{ width: '100%', padding: '16px', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none', boxSizing: 'border-box', fontSize: '16px', background: '#f8fafc', transition: 'all 0.2s' }}
+              style={{ width: '100%', padding: '16px', borderRadius: '12px', border: '1px solid #cbd5e1', outline: 'none', boxSizing: 'border-box', fontSize: '16px', background: '#f8fafc' }}
             />
             
             <button 
               type="submit"
               disabled={authLoading}
-              style={{ width: '100%', background: '#0f172a', color: 'white', padding: '16px', borderRadius: '12px', border: 'none', fontWeight: '600', fontSize: '16px', cursor: authLoading ? 'not-allowed' : 'pointer', marginTop: '8px', transition: 'background 0.2s' }}
+              style={{ width: '100%', background: '#0f172a', color: 'white', padding: '16px', borderRadius: '12px', border: 'none', fontWeight: '600', fontSize: '16px', cursor: authLoading ? 'not-allowed' : 'pointer', marginTop: '8px' }}
             >
               {authLoading ? '验证中...' : '登 录'}
             </button>
@@ -221,17 +232,22 @@ function App() {
     )
   }
 
-  // 🟢 沉浸式主界面
+  // 🟢 主界面
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f5f9', paddingBottom: '100px' }}>
+    <div style={{ minHeight: '100vh', background: '#f1f5f9', paddingBottom: '120px' }}>
       
-      {/* 顶部导航 */}
-      <header style={{ background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(0,0,0,0.05)', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 40 }}>
+      {/* 🌟 修复点 1：顶部恢复超级管理员特权徽章显示 */}
+      <header style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(0,0,0,0.05)', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 40 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <img src="/logo.png" alt="Logo" style={{ width: '26px', height: '26px', objectFit: 'contain', borderRadius: '6px' }} />
-          <h1 style={{ fontSize: '18px', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.3px', margin: 0 }}>
-            Brain Vault <span style={{ fontSize: '12px', color: '#4F46E5', fontWeight: 'bold' }}>纯净版</span>
-          </h1>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <h1 style={{ fontSize: '17px', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.3px', margin: 0, lineHeight: 1.2 }}>
+              Brain Vault
+            </h1>
+            <span style={{ fontSize: '11px', color: '#4F46E5', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '2px' }}>
+              <ShieldCheck size={12} /> Super Admin
+            </span>
+          </div>
         </div>
         <button onClick={() => supabase.auth.signOut()} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: '8px' }}>
           <LogOut size={20} strokeWidth={2.5} />
@@ -240,32 +256,32 @@ function App() {
 
       <main style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', boxSizing: 'border-box' }}>
         
-        {/* 清晰明了的搜索区域 */}
+        {/* 搜索区域 */}
         <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', width: '100%' }}>
           <div style={{ flex: '1', position: 'relative' }}>
             <Search style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={20} />
             <input 
               type="text" 
-              placeholder="多个关键字请用空格或逗号隔开..." 
+              placeholder="输入关键字 (空格或逗号分隔)" 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              style={{ width: '100%', padding: '16px 40px 16px 48px', borderRadius: '14px', border: '2px solid transparent', outline: 'none', boxSizing: 'border-box', fontSize: '16px', color: '#0f172a', fontWeight: '500', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}
+              style={{ width: '100%', padding: '16px 40px 16px 48px', borderRadius: '14px', border: 'none', outline: 'none', boxSizing: 'border-box', fontSize: '16px', color: '#0f172a', fontWeight: '500', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}
             />
           </div>
           <button 
             onClick={() => handleSearch()} 
             disabled={isSearching}
-            style={{ flexShrink: 0, background: '#4F46E5', color: 'white', padding: '0 24px', borderRadius: '14px', border: 'none', fontWeight: '600', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 15px rgba(79, 70, 229, 0.3)' }}
+            style={{ flexShrink: 0, background: '#4F46E5', color: 'white', padding: '0 20px', borderRadius: '14px', border: 'none', fontWeight: '600', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 15px rgba(79, 70, 229, 0.3)' }}
           >
             {isSearching ? <Loader2 size={18} className="animate-spin" /> : '搜索'}
           </button>
         </div>
 
-        {/* 排序与高亮的沉浸式卡片列表 */}
+        {/* 沉浸式卡片列表 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {results.length > 0 ? (
-            results.map((item, index) => {
+            results.map((item) => {
               const isSelected = selectedIds.includes(item.id);
               return (
                 <div 
@@ -278,27 +294,21 @@ function App() {
                     border: isSelected ? '2px solid #4F46E5' : '2px solid transparent',
                     boxShadow: isSelected ? '0 4px 12px rgba(79, 70, 229, 0.1)' : '0 2px 8px rgba(0,0,0,0.03)',
                     cursor: 'pointer',
-                    transition: 'all 0.15s ease',
+                    transition: 'all 0.1s ease',
                     boxSizing: 'border-box'
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-                    {/* 复选框图标：随点击自动切换 */}
                     <div style={{ flexShrink: 0, marginTop: '2px' }}>
-                      {isSelected ? (
-                        <CheckCircle2 size={24} color="#4F46E5" fill="#EEF2FF" />
-                      ) : (
-                        <Circle size={24} color="#cbd5e1" />
-                      )}
+                      {isSelected ? <CheckCircle2 size={24} color="#4F46E5" fill="#EEF2FF" /> : <Circle size={24} color="#cbd5e1" />}
                     </div>
-                    {/* 高亮渲染的内容区 */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       {item._matchScore > 0 && (
                         <span style={{ fontSize: '12px', color: '#ef4444', fontWeight: 'bold', background: '#fee2e2', padding: '2px 8px', borderRadius: '10px', marginBottom: '8px', display: 'inline-block' }}>
-                          匹配度: {item._matchScore}
+                          匹配命中: {item._matchScore} 次
                         </span>
                       )}
-                      <p style={{ color: isSelected ? '#1e1b4b' : '#334155', lineHeight: 1.6, fontSize: '15px', margin: 0, wordBreak: 'break-word' }}>
+                      <p style={{ color: isSelected ? '#1e1b4b' : '#334155', lineHeight: 1.6, fontSize: '15px', margin: 0, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
                         {highlightText(item.content)}
                       </p>
                     </div>
@@ -320,53 +330,80 @@ function App() {
         {selectedIds.length > 0 && (
           <div style={{ 
             position: 'fixed', bottom: '30px', left: '0', right: '0', margin: '0 auto', 
-            width: 'calc(100% - 40px)', maxWidth: '400px', 
-            background: 'rgba(15, 23, 42, 0.9)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-            color: 'white', padding: '12px 16px 12px 24px', borderRadius: '100px', display: 'flex', 
+            width: 'calc(100% - 40px)', maxWidth: '450px', 
+            background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+            color: 'white', padding: '12px 16px', borderRadius: '100px', display: 'flex', 
             alignItems: 'center', justifyContent: 'space-between', 
-            boxShadow: '0 20px 40px rgba(0,0,0,0.25)', zIndex: 50
+            boxShadow: '0 20px 40px rgba(0,0,0,0.3)', zIndex: 50
           }}>
-            <span style={{ fontSize: '15px', fontWeight: '600' }}>已选中 {selectedIds.length} 项</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '15px', fontWeight: '600', paddingLeft: '8px' }}>已选 {selectedIds.length} 项</span>
+              <button onClick={clearSelection} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: '#cbd5e1', padding: '6px 10px', borderRadius: '50px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', cursor: 'pointer' }}>
+                <Trash2 size={14} /> 清空
+              </button>
+            </div>
+            
             <button 
               onClick={handleReconstruct}
               style={{ background: '#4F46E5', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '100px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(79, 70, 229, 0.4)' }}
             >
-              <Sparkles size={18} /> AI 提炼
+              <Sparkles size={18} /> AI 生成报告
             </button>
           </div>
         )}
       </main>
 
-      {/* AI 结果弹窗 */}
+      {/* 🌟 修复点 2 & 3：优化的 AI 结果弹窗 (锁定背景、双重返回键、强制防溢出) */}
       {isModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ background: 'white', width: '100%', maxWidth: '800px', height: '88vh', borderTopLeftRadius: '28px', borderTopRightRadius: '28px', display: 'flex', flexDirection: 'column', boxShadow: '0 -10px 40px rgba(0,0,0,0.1)' }}>
+        <div 
+          onClick={(e) => { if(e.target === e.currentTarget) setIsModalOpen(false) }} // 点击深色背景关闭
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px', boxSizing: 'border-box' }}
+        >
+          <div style={{ background: 'white', width: '100%', maxWidth: '800px', maxHeight: '90vh', borderRadius: '24px', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
             
-            <div style={{ padding: '24px 24px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9' }}>
-              <h3 style={{ fontWeight: '800', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '18px', color: '#0f172a' }}>
-                <Sparkles size={22} color="#4F46E5" fill="#EEF2FF" /> Llama 3.3 知识重构
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}>
-                <X size={20} strokeWidth={2.5} />
+            {/* 弹窗头部：增加清晰的返回按钮 */}
+            <div style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', background: 'white' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button onClick={() => setIsModalOpen(false)} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#334155', fontWeight: '600' }}>
+                  <ArrowLeft size={18} /> 返回
+                </button>
+                <h3 style={{ fontWeight: '800', fontSize: '17px', color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Sparkles size={18} color="#4F46E5" /> 知识融合
+                </h3>
+              </div>
+              <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', display: 'flex', cursor: 'pointer', color: '#94a3b8' }}>
+                <X size={24} />
               </button>
             </div>
 
-            <div style={{ padding: '24px', overflowY: 'auto', flex: 1, whiteSpace: 'pre-wrap', lineHeight: 1.8, color: '#334155', fontSize: '16px' }}>
+            {/* 弹窗内容区：强制断行、防放大 */}
+            <div style={{ padding: '24px', overflowY: 'auto', flex: 1, WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', background: '#fafafa' }}>
               {aiLoading ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#64748b' }}>
                   <Loader2 className="animate-spin" style={{ marginBottom: '20px', color: '#4F46E5' }} size={40} />
                   <p style={{ fontWeight: '500' }}>{aiResult}</p>
                 </div>
-              ) : aiResult}
+              ) : (
+                <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: 1.8, color: '#334155', fontSize: '16px', maxWidth: '100%' }}>
+                  {aiResult}
+                </div>
+              )}
             </div>
 
+            {/* 弹窗底部操作区 */}
             {!aiLoading && (
-              <div style={{ padding: '20px 24px 30px', background: 'linear-gradient(to top, white 80%, rgba(255,255,255,0))', borderTop: '1px solid #f1f5f9' }}>
+              <div style={{ padding: '20px 24px', background: 'white', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '12px' }}>
+                <button 
+                  onClick={() => setIsModalOpen(false)}
+                  style={{ flex: 1, background: '#f8fafc', color: '#334155', border: '1px solid #e2e8f0', padding: '16px', borderRadius: '14px', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}
+                >
+                  关闭
+                </button>
                 <button 
                   onClick={() => { navigator.clipboard.writeText(aiResult); alert("报告已复制！") }}
-                  style={{ width: '100%', background: '#0f172a', color: 'white', border: 'none', padding: '16px', borderRadius: '16px', fontSize: '16px', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer', boxShadow: '0 8px 16px rgba(15, 23, 42, 0.15)' }}
+                  style={{ flex: 2, background: '#0f172a', color: 'white', border: 'none', padding: '16px', borderRadius: '14px', fontSize: '16px', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}
                 >
-                  <Copy size={20} /> 复制 Markdown 报告
+                  <Copy size={20} /> 复制全部内容
                 </button>
               </div>
             )}
