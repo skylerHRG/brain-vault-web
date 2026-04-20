@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { 
   Search, FileText, LogOut, Sparkles, X, Copy, 
   ShieldCheck, BarChart3, Lock, Mail, Loader2, 
-  Users, PenTool, Github
+  Users, PenTool 
 } from 'lucide-react'
 import { supabase } from './supabaseClient'
 
@@ -189,7 +189,7 @@ function App() {
             onClick={() => supabase.auth.signInWithOAuth({ provider: 'github' })}
             style={{ width: '100%', background: '#1e293b', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
           >
-            <Github size={20} /> 使用 GitHub 登录
+            使用 GitHub 登录
           </button>
         </div>
       </div>
