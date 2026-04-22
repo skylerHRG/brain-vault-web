@@ -8,7 +8,6 @@ import {
 import { supabase } from './supabaseClient'
 
 const formatBytes = (bytes) => {
-  // 向下兼容：旧版软件没有采集 file_size，如果为空或为0，优雅地显示“未知大小”
   if (!bytes || bytes === 0) return '未知大小';
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
@@ -35,7 +34,8 @@ function App() {
   const [noteLoading, setNoteLoading] = useState(false)
   
   const [role, setRole] = useState(null)
-  const [stats, setStats] = useState({ totalAssets: 0 })
+  // ⚠️ 改造：将数据统计分为 物理文件(files) 和 文本碎片(chunks)
+  const [stats, setStats] = useState({ files: 0, chunks: 0 })
   
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -62,11 +62,10 @@ function App() {
     setRole(userRole)
 
     if (userRole === 'superadmin') {
-      // ⚠️ 核心兼容改造 1：撤销 eq('is_synced', 1) 的强制过滤锁。
-      // 旧版软件上传的数据没有这个字段，撤销过滤后，只要数据在云端，就会被全量统计。
-      const { count } = await supabase.from('asset_chunks')
-        .select('*', { count: 'exact', head: true })
-      setStats({ totalAssets: count || 0 })
+      // ⚠️ 改造：分别统计 assets 表和 asset_chunks 表
+      const { count: fileCount } = await supabase.from('assets').select('*', { count: 'exact', head: true });
+      const { count: chunkCount } = await supabase.from('asset_chunks').select('*', { count: 'exact', head: true });
+      setStats({ files: fileCount || 0, chunks: chunkCount || 0 });
     }
   }
 
@@ -89,7 +88,6 @@ function App() {
     const keywords = searchQuery.split(/[\s,，]+/).filter(k => k.trim() !== '');
 
     try {
-      // ⚠️ 核心兼容改造 2：移除 eq('is_synced', 1)，全面接纳旧版数据的搜索。
       let query = supabase.from('asset_chunks').select('*, assets(*)');
       
       if (keywords.length > 0) {
@@ -168,7 +166,7 @@ function App() {
         content: quickNote.trim(),
         user_id: session.user.id, 
         visibility: quickNoteVisibility,
-        is_synced: 1 // 针对 Web 端新录入的数据，依然严格标记为已同步
+        is_synced: 1 
       });
       if (error) throw error;
       setQuickNote(""); setIsNoteModalOpen(false); alert("灵感已写入中枢！");
@@ -198,7 +196,6 @@ function App() {
           </div>
           <h2 style={{ fontSize: '26px', fontWeight: '900', color: '#0f172a', marginBottom: '8px', letterSpacing: '-0.5px' }}>PrismHub</h2>
           <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '32px', fontWeight: '500' }}>多维数据的重构中枢</p>
-          
           <form style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} onSubmit={handleEmailLogin}>
             <input type="email" placeholder="枢纽授权账号" value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: '100%', padding: '16px', borderRadius: '12px', border: '1px solid #cbd5e1', fontSize: '15px', outline: 'none', background: '#f8fafc' }} />
             <input type="password" placeholder="访问密钥" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: '100%', padding: '16px', borderRadius: '12px', border: '1px solid #cbd5e1', fontSize: '15px', outline: 'none', background: '#f8fafc' }} />
@@ -231,7 +228,15 @@ function App() {
           <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
             <div style={{ flex: 1, background: 'white', padding: '16px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center', gap: '14px' }}>
               <div style={{ background: '#f0f9ff', padding: '12px', borderRadius: '12px', color: '#0284c7' }}><Database size={22} /></div>
-              <div><p style={{ margin: 0, fontSize: '13px', color: '#64748b', fontWeight: '600' }}>中枢资产总量</p><h3 style={{ margin: 0, fontSize: '22px', fontWeight: '900', color: '#0f172a' }}>{stats.totalAssets} <span style={{ fontSize: '14px', color: '#94a3b8', fontWeight: '600' }}>Fragments</span></h3></div>
+              <div>
+                <p style={{ margin: 0, fontSize: '13px', color: '#64748b', fontWeight: '600' }}>中枢数据概览</p>
+                <h3 style={{ margin: 0, fontSize: '20px', fontWeight: '900', color: '#0f172a', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                  {/* ⚠️ 改造：分别展示两种资产的梳理，彻底消除误解 */}
+                  {stats.files} <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '600' }}>物理文件</span> 
+                  <span style={{ color: '#cbd5e1', fontWeight: '400' }}>|</span> 
+                  {stats.chunks} <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '600' }}>知识碎片</span>
+                </h3>
+              </div>
             </div>
             <div onClick={() => setIsNoteModalOpen(true)} style={{ background: 'linear-gradient(135deg, #0ea5e9 0%, #4f46e5 100%)', color: 'white', padding: '16px', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100px', cursor: 'pointer', boxShadow: '0 8px 20px rgba(79, 70, 229, 0.25)' }}>
               <Plus size={26} strokeWidth={3} style={{ marginBottom: '4px' }} /><span style={{ fontSize: '13px', fontWeight: '700' }}>捕获灵感</span>
@@ -275,10 +280,9 @@ function App() {
                         )}
                         {hasAssets && item.assets.is_enriched === 0 && (
                            <span style={{ fontSize: '11px', color: '#d97706', background: '#fef3c7', padding: '4px 10px', borderRadius: '100px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                             <Clock size={12} /> AI 解析排队中...
+                             <Clock size={12} /> 原件未解析文本
                            </span>
                         )}
-                        {/* ⚠️ 核心兼容改造 3：兼容缺失 file_size 的旧数据展示 */}
                         {hasAssets && (
                            <span style={{ fontSize: '11px', color: '#64748b', background: '#f1f5f9', padding: '4px 10px', borderRadius: '100px', fontWeight: '600' }}>
                              {formatBytes(item.assets.file_size)}
@@ -286,7 +290,7 @@ function App() {
                         )}
                         {hasAssets && item.assets.cloud_url && (
                           <a href={item.assets.cloud_url} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#0ea5e9', background: '#e0f2fe', padding: '4px 10px', borderRadius: '100px', textDecoration: 'none', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
-                            <Link size={12} /> {item.assets.asset_type === 'vault' ? '查看保险库原件' : '查看原文件'}
+                            <Link size={12} /> 查看原文件
                           </a>
                         )}
                       </div>
@@ -309,6 +313,7 @@ function App() {
         )}
       </main>
 
+      {/* 弹窗及其他 UI 同上保持不变 */}
       {isNoteModalOpen && (
         <div onClick={(e) => e.target === e.currentTarget && setIsNoteModalOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
           <div style={{ background: 'white', width: '100%', maxWidth: '500px', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
