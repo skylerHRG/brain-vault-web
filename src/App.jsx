@@ -7,7 +7,6 @@ import {
 } from 'lucide-react'
 import { supabase } from './supabaseClient'
 
-// 辅助函数：格式化文件大小
 const formatBytes = (bytes) => {
   if (!bytes || bytes === 0) return '未知大小';
   const k = 1024;
@@ -41,7 +40,6 @@ function App() {
   const [password, setPassword] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
 
-  // 1. 初始化鉴权与看板
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
@@ -62,16 +60,14 @@ function App() {
     const userRole = data ? data.role : 'user'
     setRole(userRole)
 
-    // PrismHub 规范：只统计 is_synced = 1 的已同步资产
     if (userRole === 'superadmin') {
+      // ⚠️ 撤销过滤锁：向下兼容本地旧版软件，无论 is_synced 是啥，只要在云端就统计
       const { count } = await supabase.from('asset_chunks')
         .select('*', { count: 'exact', head: true })
-        .eq('is_synced', 1) 
       setStats({ totalAssets: count || 0 })
     }
   }
 
-  // 移动端防穿透滚动锁定
   useEffect(() => {
     const isAnyModalOpen = isModalOpen || isNoteModalOpen;
     document.body.style.overflow = isAnyModalOpen ? 'hidden' : 'unset';
@@ -83,7 +79,6 @@ function App() {
     }
   }, [isModalOpen, isNoteModalOpen])
 
-  // ================= PrismHub 核心搜索逻辑 (v2.1) =================
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     
@@ -92,10 +87,8 @@ function App() {
     const keywords = searchQuery.split(/[\s,，]+/).filter(k => k.trim() !== '');
 
     try {
-      // 核心：严格遵循 v2.1，查询 is_synced=1，并联表获取 assets 元数据
-      let query = supabase.from('asset_chunks')
-        .select('*, assets(*)')
-        .eq('is_synced', 1);
+      // ⚠️ 撤销过滤锁：移除 eq('is_synced', 1)，全面接纳本地传上来的数据
+      let query = supabase.from('asset_chunks').select('*, assets(*)');
       
       if (keywords.length > 0) {
         const orString = keywords.map(kw => `content.ilike.%${kw}%`).join(',');
@@ -107,7 +100,6 @@ function App() {
 
       let processedData = data || [];
 
-      // 智能打分排序
       if (keywords.length > 0 && processedData.length > 0) {
         processedData = processedData.map(item => {
           let score = 0;
@@ -115,10 +107,7 @@ function App() {
           keywords.forEach(kw => {
             const kwLower = kw.toLowerCase();
             let pos = contentLower.indexOf(kwLower);
-            while (pos !== -1) {
-              score++;
-              pos = contentLower.indexOf(kwLower, pos + 1);
-            }
+            while (pos !== -1) { score++; pos = contentLower.indexOf(kwLower, pos + 1); }
           });
           return { ...item, _matchScore: score };
         });
@@ -168,7 +157,6 @@ function App() {
     } catch (e) { setAiResult("❌ 知识重构失败: " + e.message); } finally { setAiLoading(false); }
   }
 
-  // 随心记自动打上 is_synced: 1
   const handleAddQuickNote = async () => {
     if (!quickNote.trim()) return;
     setNoteLoading(true);
@@ -178,7 +166,7 @@ function App() {
         content: quickNote.trim(),
         user_id: session.user.id, 
         visibility: quickNoteVisibility,
-        is_synced: 1 // Web端直接产生的知识，天然已同步
+        is_synced: 1 
       });
       if (error) throw error;
       setQuickNote(""); setIsNoteModalOpen(false); alert("灵感已写入中枢！");
@@ -198,8 +186,6 @@ function App() {
     if (error) alert("中枢访问拒绝");
     setAuthLoading(false);
   };
-
-  // ================= 界面渲染区 =================
 
   if (!session) {
     return (
@@ -225,8 +211,6 @@ function App() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', paddingBottom: '120px' }}>
-      
-      {/* 顶部导航 (PrismHub 风格) */}
       <header style={{ background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderBottom: '1px solid rgba(0,0,0,0.05)', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 40 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ background: 'linear-gradient(135deg, #38bdf8 0%, #4f46e5 100%)', padding: '6px', borderRadius: '8px' }}>
@@ -241,8 +225,6 @@ function App() {
       </header>
 
       <main style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', boxSizing: 'border-box' }}>
-        
-        {/* 看板 */}
         {role === 'superadmin' && (
           <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
             <div style={{ flex: 1, background: 'white', padding: '16px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -255,7 +237,6 @@ function App() {
           </div>
         )}
 
-        {/* 搜索框 */}
         <div style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
           <div style={{ flex: '1', position: 'relative' }}>
             <Search style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={20} />
@@ -266,7 +247,6 @@ function App() {
           </button>
         </div>
 
-        {/* 结果列表 */}
         {hasSearched ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {results.length > 0 ? results.map((item) => {
@@ -279,14 +259,8 @@ function App() {
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
                     <div style={{ flexShrink: 0, marginTop: '2px' }}>{isSelected ? <CheckCircle2 size={24} color="#10b981" fill="#ecfdf5" /> : <Circle size={24} color="#cbd5e1" />}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      
-                      {/* v2.1 PrismHub 专属标签系统 */}
                       <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-                        
-                        {/* 1. 匹配度 */}
                         {item._matchScore > 1 && <span style={{ fontSize: '11px', color: '#ef4444', fontWeight: 'bold', background: '#fee2e2', padding: '4px 10px', borderRadius: '100px' }}>命中 {item._matchScore}</span>}
-                        
-                        {/* 2. RLS 权限标签 (我的私有 / 他人私有 / 公开) */}
                         {item.visibility === 'private' ? (
                           <span style={{ fontSize: '11px', color: isMine ? '#059669' : '#7c3aed', background: isMine ? '#d1fae5' : '#ede9fe', padding: '4px 10px', borderRadius: '100px', display: 'flex', alignItems: 'center', gap: 4, fontWeight: '700' }}>
                             {isMine ? <Lock size={12} /> : <Eye size={12} />} 
@@ -297,31 +271,22 @@ function App() {
                             <Globe size={12} /> 全局公开
                           </span>
                         )}
-
-                        {/* 3. AI 解析状态锁 */}
                         {hasAssets && item.assets.is_enriched === 0 && (
                            <span style={{ fontSize: '11px', color: '#d97706', background: '#fef3c7', padding: '4px 10px', borderRadius: '100px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
                              <Clock size={12} /> AI 解析排队中...
                            </span>
                         )}
-                        
-                        {/* 4. 文件体积显示 */}
                         {hasAssets && item.assets.file_size && (
                            <span style={{ fontSize: '11px', color: '#64748b', background: '#f1f5f9', padding: '4px 10px', borderRadius: '100px', fontWeight: '600' }}>
                              {formatBytes(item.assets.file_size)}
                            </span>
                         )}
-
-                        {/* 5. PrismHub 网盘直链预览 */}
                         {hasAssets && item.assets.cloud_url && (
                           <a href={item.assets.cloud_url} target="_blank" rel="noreferrer" style={{ fontSize: '11px', color: '#0ea5e9', background: '#e0f2fe', padding: '4px 10px', borderRadius: '100px', textDecoration: 'none', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
                             <Link size={12} /> {item.assets.asset_type === 'vault' ? '查看保险库原件' : '查看原文件'}
                           </a>
                         )}
-
                       </div>
-
-                      {/* 内容正文 */}
                       <p style={{ color: isSelected ? '#064e3b' : '#334155', lineHeight: 1.7, fontSize: '15px', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                         {highlightText(item.content)}
                       </p>
@@ -333,7 +298,6 @@ function App() {
           </div>
         ) : <div style={{ textAlign: 'center', padding: '80px 0', color: '#94a3b8' }}><Layers size={48} strokeWidth={1.5} style={{ margin: '0 auto 16px', opacity: 0.2 }} /><p style={{ fontWeight: '500' }}>输入指令，激活 PrismHub 数据折射</p></div>}
 
-        {/* 悬浮操作栏 */}
         {selectedIds.length > 0 && (
           <div style={{ position: 'fixed', bottom: '30px', left: '0', right: '0', margin: '0 auto', width: 'calc(100% - 40px)', maxWidth: '500px', background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', color: 'white', padding: '14px 20px', borderRadius: '100px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', zIndex: 50 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}><span style={{ fontSize: '15px', fontWeight: '700', paddingLeft: '8px' }}>已捕获 {selectedIds.length} 个碎片</span><button onClick={() => setSelectedIds([])} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#cbd5e1', padding: '6px 12px', borderRadius: '50px', fontSize: '13px', cursor: 'pointer', fontWeight: '600' }}><Trash2 size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }}/> 清空</button></div>
@@ -342,7 +306,7 @@ function App() {
         )}
       </main>
 
-      {/* 随心记模态框 */}
+      {/* 弹窗及其他 UI 同上保持不变 */}
       {isNoteModalOpen && (
         <div onClick={(e) => e.target === e.currentTarget && setIsNoteModalOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
           <div style={{ background: 'white', width: '100%', maxWidth: '500px', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
@@ -359,7 +323,6 @@ function App() {
         </div>
       )}
 
-      {/* AI 报告弹窗 */}
       {isModalOpen && (
         <div onClick={(e) => e.target === e.currentTarget && setIsModalOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
           <div style={{ background: 'white', width: '100%', maxWidth: '800px', maxHeight: '90vh', borderRadius: '24px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
