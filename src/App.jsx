@@ -34,7 +34,6 @@ function App() {
   const [noteLoading, setNoteLoading] = useState(false)
   
   const [role, setRole] = useState(null)
-  // ⚠️ 改造：将数据统计分为 物理文件(files) 和 文本碎片(chunks)
   const [stats, setStats] = useState({ files: 0, chunks: 0 })
   
   const [email, setEmail] = useState('')
@@ -62,7 +61,6 @@ function App() {
     setRole(userRole)
 
     if (userRole === 'superadmin') {
-      // ⚠️ 改造：分别统计 assets 表和 asset_chunks 表
       const { count: fileCount } = await supabase.from('assets').select('*', { count: 'exact', head: true });
       const { count: chunkCount } = await supabase.from('asset_chunks').select('*', { count: 'exact', head: true });
       setStats({ files: fileCount || 0, chunks: chunkCount || 0 });
@@ -80,6 +78,7 @@ function App() {
     }
   }, [isModalOpen, isNoteModalOpen])
 
+  // ================= 核心：双引擎全息检索 =================
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     
@@ -88,18 +87,47 @@ function App() {
     const keywords = searchQuery.split(/[\s,，]+/).filter(k => k.trim() !== '');
 
     try {
-      let query = supabase.from('asset_chunks').select('*, assets(*)');
+      // 引擎 A：搜文本内容
+      let queryChunks = supabase.from('asset_chunks').select('*, assets(*)');
+      // 引擎 B：搜物理文件名
+      let queryAssets = supabase.from('assets').select('*'); 
       
       if (keywords.length > 0) {
-        const orString = keywords.map(kw => `content.ilike.%${kw}%`).join(',');
-        query = query.or(orString);
+        const orChunks = keywords.map(kw => `content.ilike.%${kw}%`).join(',');
+        queryChunks = queryChunks.or(orChunks);
+
+        const orAssets = keywords.map(kw => `file_name.ilike.%${kw}%`).join(',');
+        queryAssets = queryAssets.or(orAssets);
       }
 
-      const { data, error } = await query.limit(60); 
-      if (error) throw error;
+      // 并发执行双引擎
+      const [resChunks, resAssets] = await Promise.all([
+        queryChunks.limit(60),
+        queryAssets.limit(60)
+      ]);
 
-      let processedData = data || [];
+      if (resChunks.error) throw resChunks.error;
 
+      let chunksData = resChunks.data || [];
+      let assetsData = resAssets.data || [];
+
+      // 排重逻辑：如果文件名搜到了，但它已经有文本碎片被搜到了，就不重复显示
+      const matchedAssetUuids = new Set(chunksData.filter(c => c.asset_uuid).map(c => c.asset_uuid));
+
+      // 把没有对应文本的图片/视频，包装成“虚假碎片”显示出来
+      let mappedAssets = assetsData
+        .filter(a => !matchedAssetUuids.has(a.uuid))
+        .map(a => ({
+          id: a.uuid, 
+          content: `📁 [物理原文件] ${a.file_name || '未命名文件'}`,
+          user_id: session.user.id, // 上帝视角默认挂载
+          visibility: a.access_level || 'private',
+          assets: a
+        }));
+
+      let processedData = [...chunksData, ...mappedAssets];
+
+      // 智能打分排序
       if (keywords.length > 0 && processedData.length > 0) {
         processedData = processedData.map(item => {
           let score = 0;
@@ -168,10 +196,11 @@ function App() {
         visibility: quickNoteVisibility,
         is_synced: 1 
       });
-      if (error) throw error;
-      setQuickNote(""); setIsNoteModalOpen(false); alert("灵感已写入中枢！");
+      if (error) throw error; // 如果 SQL 没跑通，这里会精准报错拦截
+      
+      setQuickNote(""); setIsNoteModalOpen(false); alert("灵感已成功写入中枢！");
       fetchRoleAndStats(session.user.id);
-    } catch (e) { alert("写入失败: " + e.message); } finally { setNoteLoading(false); }
+    } catch (e) { alert("写入失败 (请确保跑通了最新SQL): " + e.message); } finally { setNoteLoading(false); }
   }
 
   const toggleSelection = (id) => {
@@ -231,7 +260,6 @@ function App() {
               <div>
                 <p style={{ margin: 0, fontSize: '13px', color: '#64748b', fontWeight: '600' }}>中枢数据概览</p>
                 <h3 style={{ margin: 0, fontSize: '20px', fontWeight: '900', color: '#0f172a', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                  {/* ⚠️ 改造：分别展示两种资产的梳理，彻底消除误解 */}
                   {stats.files} <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '600' }}>物理文件</span> 
                   <span style={{ color: '#cbd5e1', fontWeight: '400' }}>|</span> 
                   {stats.chunks} <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '600' }}>知识碎片</span>
@@ -247,7 +275,7 @@ function App() {
         <div style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
           <div style={{ flex: '1', position: 'relative' }}>
             <Search style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={20} />
-            <input type="text" placeholder="输入全息指令调取记忆..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={handleKeyDown} style={{ width: '100%', padding: '16px 16px 16px 48px', borderRadius: '16px', border: '1px solid transparent', fontSize: '16px', fontWeight: '500', boxShadow: '0 4px 20px rgba(0,0,0,0.04)', outline: 'none', transition: 'all 0.2s' }} />
+            <input type="text" placeholder="输入文件名或文本检索记忆..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={handleKeyDown} style={{ width: '100%', padding: '16px 16px 16px 48px', borderRadius: '16px', border: '1px solid transparent', fontSize: '16px', fontWeight: '500', boxShadow: '0 4px 20px rgba(0,0,0,0.04)', outline: 'none', transition: 'all 0.2s' }} />
           </div>
           <button onClick={handleSearch} disabled={isSearching} style={{ background: '#0f172a', color: 'white', padding: '0 24px', borderRadius: '16px', border: 'none', fontWeight: '700', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
             {isSearching ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />} 调取
@@ -280,7 +308,7 @@ function App() {
                         )}
                         {hasAssets && item.assets.is_enriched === 0 && (
                            <span style={{ fontSize: '11px', color: '#d97706', background: '#fef3c7', padding: '4px 10px', borderRadius: '100px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                             <Clock size={12} /> 原件未解析文本
+                             <Clock size={12} /> 原件待提取文本
                            </span>
                         )}
                         {hasAssets && (
@@ -313,7 +341,6 @@ function App() {
         )}
       </main>
 
-      {/* 弹窗及其他 UI 同上保持不变 */}
       {isNoteModalOpen && (
         <div onClick={(e) => e.target === e.currentTarget && setIsNoteModalOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
           <div style={{ background: 'white', width: '100%', maxWidth: '500px', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
